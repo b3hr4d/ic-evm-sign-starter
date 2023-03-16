@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dfx": "0.11.2",
+  "dfx": "0.13.1",
   "canisters": {
     "backend": {
       "type": "rust",
@@ -9,9 +9,7 @@
     },
     "frontend": {
       "type": "assets",
-      "source": [
-        "src/frontend/build"
-      ]
+      "source": ["src/frontend/build"]
     },
     "identity": {
       "type": "custom",
@@ -23,12 +21,6 @@
     "build": {
       "packtool": "",
       "args": ""
-    }
-  },
-  "networks": {
-    "local": {
-      "bind": "127.0.0.1:8000",
-      "type": "ephemeral"
     }
   }
 }

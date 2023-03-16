@@ -1,235 +1,246 @@
-import { useCallback, useEffect, useState } from "react";
-import { ethers } from "ethers";
-import { AuthClient } from "@dfinity/auth-client";
+import { AuthClient } from "@dfinity/auth-client"
+import { ethers } from "ethers"
+import { Fragment, useCallback, useEffect, useState } from "react"
 
 import {
   Box,
-  Flex,
   Button,
-  Heading,
-  Text,
   Divider,
-  Spinner,
+  Flex,
+  Heading,
   IconButton,
-  useToast,
-  useDisclosure,
   Link,
-} from "@chakra-ui/react";
+  Spinner,
+  Text,
+  useDisclosure,
+  useToast,
+} from "@chakra-ui/react"
 import {
-  HiClock,
-  HiPlusCircle,
-  HiArrowLeftCircle,
   HiArrowDownOnSquareStack,
-  HiCog6Tooth,
+  HiArrowLeftCircle,
   HiArrowTopRightOnSquare,
+  HiClock,
+  HiCog6Tooth,
   HiOutlineClipboardDocument,
   HiOutlineClipboardDocumentCheck,
-} from "react-icons/hi2";
-import SendFundsModal from "./modals/SendFundsModal";
-import TransactionsModal from "./modals/TransactionsModal";
-import NetworkModal from "./modals/NetworkModal";
-import TopupModal from "./modals/TopupModal";
+  HiPlusCircle,
+} from "react-icons/hi2"
+import NetworkModal from "./modals/NetworkModal"
+import SendFundsModal from "./modals/SendFundsModal"
+import TopupModal from "./modals/TopupModal"
+import TransactionsModal from "./modals/TransactionsModal"
 
-import { getDelegationIdentity, getHostFromUrl } from "./helpers/utils";
-import { getActor } from "./helpers/actor";
-import { mainnets, testnets } from "./helpers/networks";
-import { IC_URL, IDENTITY_CANISTER_ID, LOCAL_SIGNER } from "./helpers/config";
-import { DEFAULT_CHAIN } from "./helpers/config";
-import { ellipsisAnimation } from "./helpers/animation";
+import { getActor } from "./helpers/actor"
+import { ellipsisAnimation } from "./helpers/animation"
+import {
+  DEFAULT_CHAIN,
+  IC_URL,
+  IDENTITY_CANISTER_ID,
+  LOCAL_SIGNER,
+} from "./helpers/config"
+import { mainnets, testnets } from "./helpers/networks"
+import { getDelegationIdentity, getHostFromUrl } from "./helpers/utils"
 
-const isLocal = getHostFromUrl(IC_URL).startsWith("localhost");
+const isLocal = getHostFromUrl(IC_URL).startsWith("localhost")
 
-const chainId = localStorage.getItem("chain-id") ?? DEFAULT_CHAIN;
+const chainId = localStorage.getItem("chain-id") ?? DEFAULT_CHAIN
 const defaultNetwork =
   [].concat(testnets, testnets).find((r) => r.chainId === +chainId) ??
-  mainnets[0];
+  mainnets[0]
 
 const App = () => {
-  const toast = useToast();
+  const toast = useToast()
 
-  const [authClient, setAuthClient] = useState(null);
-  const [provider, setProvider] = useState(null);
-  const [actor, setActor] = useState(null);
-  const [address, setAddress] = useState(null);
-  const [balance, setBalance] = useState(null);
-  const [hasCopied, setHasCopied] = useState(false);
-  const [network, setNetwork] = useState(defaultNetwork);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [waiting, setWaiting] = useState(false);
-  const [transactions, setTransactions] = useState([]);
-  const [cycles, setCycles] = useState(null);
+  const [authClient, setAuthClient] = useState(null)
+  const [provider, setProvider] = useState(null)
+  const [actor, setActor] = useState(null)
+  const [addresses, setAddresses] = useState([
+    {
+      address: "",
+      transactions: [],
+      cycles_balance: 0,
+      balance: 0,
+    },
+  ])
+
+  const [hasCopied, setHasCopied] = useState(false)
+  const [network, setNetwork] = useState(defaultNetwork)
+  const [loggedIn, setLoggedIn] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+  const [transactions, setTransactions] = useState([])
+  const [cycles, setCycles] = useState(null)
   const {
     isOpen: isSendOpen,
     onOpen: onSendOpen,
     onClose: onSendClose,
-  } = useDisclosure();
+  } = useDisclosure()
   const {
     isOpen: isHistoryOpen,
     onOpen: onHistoryOpen,
     onClose: onHistoryClose,
-  } = useDisclosure();
+  } = useDisclosure()
   const {
     isOpen: isNetworkOpen,
     onOpen: onNetworkOpen,
     onClose: onNetworkClose,
-  } = useDisclosure();
+  } = useDisclosure()
   const {
     isOpen: isTopupOpen,
     onOpen: onTopupOpen,
     onClose: onTopupClose,
-  } = useDisclosure();
+  } = useDisclosure()
 
   const loadUser = useCallback(
     async (_provider, _actor) => {
       try {
-        setBalance();
-        const [caller] = await _actor.get_caller_data(Number(network.chainId));
+        const address_data = await _actor.get_address_data(
+          Number(network.chainId)
+        )
+        console.log(address_data)
+        if (address_data) {
+          for await (const data of address_data) {
+            setTransactions(
+              data.transactions.transactions.map((tx) => ({
+                ...tx,
+                timestamp: new Date(Number(tx.timestamp / 1000n / 1000n)),
+              }))
+            )
 
-        if (caller) {
-          const { address, transactions, cycles_balance } = caller;
-          setAddress(address);
-          setTransactions(
-            transactions.transactions.map((tx) => ({
-              ...tx,
-              timestamp: new Date(Number(tx.timestamp / 1000n / 1000n)),
-            }))
-          );
-          const balance = await _provider.getBalance(address);
-          setBalance(ethers.utils.formatEther(balance));
-          setCycles(cycles_balance);
+            const balance = await _provider.getBalance(data.address)
+            data.balance = ethers.utils.formatEther(balance)
+          }
         }
+
+        setAddresses(address_data)
       } catch (error) {
-        console.log(error);
-        const message = error?.result?.reject_message ?? "";
+        console.log(error)
+        const message = error?.result?.reject_message ?? ""
         toast({
           title: "Error",
           status: "error",
           description: message,
           variant: "subtle",
-        });
+        })
       }
     },
     [network.chainId, toast]
-  );
+  )
 
   const onLogin = async () => {
-    setLoggedIn(true);
+    setLoggedIn(true)
 
-    let identity = authClient.getIdentity();
+    let identity = authClient.getIdentity()
     if (identity._inner._inner) {
-      identity = identity._inner;
+      identity = identity._inner
     }
 
-    localStorage.setItem("identity", JSON.stringify(identity));
-    const _actor = getActor(identity);
-    setActor(_actor);
+    localStorage.setItem("identity", JSON.stringify(identity))
+    const _actor = getActor(identity)
+    setActor(_actor)
 
-    await loadUser(provider, _actor);
-  };
+    await loadUser(provider, _actor)
+  }
 
   const onLogout = () => {
-    setLoggedIn(false);
+    setLoggedIn(false)
 
-    localStorage.removeItem("identity");
-    localStorage.removeItem("key");
-  };
+    localStorage.removeItem("identity")
+    localStorage.removeItem("key")
+  }
 
   const logout = useCallback(async () => {
-    await authClient.logout();
-    onLogout("");
-  }, [authClient]);
+    await authClient.logout()
+    onLogout("")
+  }, [authClient])
 
   const loadProviderAndUser = useCallback(async () => {
-    const rpcProvider = new ethers.providers.JsonRpcProvider(network.rpc[0]);
-    setProvider(rpcProvider);
+    const rpcProvider = new ethers.providers.JsonRpcProvider(network.rpc[0])
+    setProvider(rpcProvider)
 
-    const delegationIdentity = getDelegationIdentity();
+    const delegationIdentity = getDelegationIdentity()
 
     const _authClient = await AuthClient.create({
       identity: delegationIdentity,
-    });
-    setAuthClient(_authClient);
+    })
+    setAuthClient(_authClient)
 
     if (delegationIdentity) {
-      setLoggedIn(true);
-      const identity = _authClient.getIdentity();
-      const _actor = getActor(identity);
-      setActor(_actor);
-      await loadUser(rpcProvider, _actor);
+      setLoggedIn(true)
+      const identity = _authClient.getIdentity()
+      const _actor = getActor(identity)
+      setActor(_actor)
+      await loadUser(rpcProvider, _actor)
     }
-  }, [loadUser, network.rpc]);
+  }, [loadUser, network.rpc])
 
   useEffect(() => {
-    loadProviderAndUser();
-  }, [loadProviderAndUser, network]);
+    loadProviderAndUser()
+  }, [loadProviderAndUser, network])
 
   const login = async () => {
     const identityProvider = isLocal
       ? `${IC_URL}?canisterId=${IDENTITY_CANISTER_ID}`
-      : "https://identity.ic0.app/#authorize";
-    const maxTimeToLive = 24n * 60n * 60n * 1000n * 1000n * 1000n;
+      : "https://identity.ic0.app/#authorize"
+    const maxTimeToLive = 24n * 60n * 60n * 1000n * 1000n * 1000n
     authClient.login({
       onSuccess: onLogin,
       identityProvider,
       maxTimeToLive,
-    });
-  };
+    })
+  }
 
   const handleTopUp = async () => {
-    const isHardhat = network.chainId === 31337;
+    const isHardhat = network.chainId === 31337
     if (isHardhat) {
-      const signer = await provider.getSigner(LOCAL_SIGNER);
+      const signer = await provider.getSigner(LOCAL_SIGNER)
       await signer.sendTransaction({
         value: ethers.utils.parseEther("10"),
-        to: address,
-      });
+        to: addresses[0].address,
+      })
 
-      const balance = await provider.getBalance(address);
-      setBalance(ethers.utils.formatEther(balance));
+      const balance = await provider.getBalance(addresses[0].address)
     } else if (network.faucets.length > 0) {
-      window.open(network.faucets[0], "_blank").focus();
+      window.open(network.faucets[0], "_blank").focus()
     } else {
       toast({
         title: "There is no faucet for this network",
         variant: "subtle",
-      });
+      })
     }
-  };
+  }
 
   const handleCreateEVMWallet = async () => {
-    toast({ title: "Creating wallet...", variant: "subtle" });
+    toast({ title: "Creating wallet...", variant: "subtle" })
 
-    const res = await actor.create_address();
+    await actor.create_address(addresses.length)
 
-    toast({ title: "New wallet created" });
+    toast({ title: "New wallet created" })
 
-    const { address } = res.Ok;
-    const balance = await provider.getBalance(address);
-    setBalance(ethers.utils.formatEther(balance));
-    setAddress(address);
-  };
+    await loadUser(provider, actor)
+  }
 
-  const copyToClipboard = async () => {
-    setHasCopied(true);
+  const copyToClipboard = async (address) => {
+    setHasCopied(true)
 
-    await navigator.clipboard.writeText(address);
-    toast({ title: "Copied to clipboard", variant: "subtle" });
+    await navigator.clipboard.writeText(address)
+    toast({ title: "Copied to clipboard", variant: "subtle" })
 
-    setTimeout(() => setHasCopied(false), 2000);
-  };
+    setTimeout(() => setHasCopied(false), 2000)
+  }
 
-  const goToExplorer = () => {
+  const goToExplorer = (index) => {
+    const address = addresses[index].address
     if (network.explorers.length > 0) {
       window
         .open(`${network.explorers[0].url}/address/${address}`, "_blank")
-        .focus();
+        .focus()
     } else {
       toast({
         title: "There is no explorer for this network",
         variant: "subtle",
-      });
+      })
     }
-  };
+  }
 
   return (
     <Flex justifyContent={"center"} margin="auto">
@@ -256,90 +267,86 @@ const App = () => {
               {network?.name}
             </Button>
           </Flex>
-
+          <Button m={2} onClick={handleCreateEVMWallet}>
+            Create EVM Wallet
+          </Button>
           <Flex flexDirection={"column"} alignItems={"center"} h="100%">
+            <Flex>
+              {cycles > 0n || isLocal ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => onTopupOpen()}
+                >
+                  {(
+                    Number(((cycles ?? 0n) * 1000n) / 1_000_000_000_000n) / 1000
+                  )?.toPrecision(2)}
+                  T Cycles
+                </Button>
+              ) : (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  colorScheme="yellow"
+                  onClick={() => onTopupOpen()}
+                >
+                  Not enough cycles
+                </Button>
+              )}
+            </Flex>
             <Box mt="auto">
               {loggedIn ? (
                 <Box>
-                  {!address ? (
-                    <Button onClick={handleCreateEVMWallet}>
-                      Create EVM Wallet
-                    </Button>
-                  ) : (
-                    <>
-                      <Flex mb="40px" justifyContent="center">
-                        {balance ? (
-                          <Text fontSize="3xl">
-                            {parseFloat(balance).toPrecision(3)}{" "}
-                            <Box as="span" fontSize="20px">
-                              {network.nativeCurrency.symbol}
-                            </Box>
-                          </Text>
-                        ) : (
-                          <Spinner />
-                        )}
-                      </Flex>
-                      <Flex mb="12px">
-                        {address && (
-                          <Flex flexDir="column" alignItems="center">
-                            <Flex alignItems="center" mb="8px">
-                              <Text>
-                                {address.slice(0, 10)}...{address.slice(-8)}
-                              </Text>
-                              <IconButton
-                                onClick={copyToClipboard}
-                                ml="8px"
-                                fontSize="16px"
-                                size="xs"
-                                variant="ghost"
-                                icon={
-                                  hasCopied ? (
-                                    <HiOutlineClipboardDocumentCheck />
-                                  ) : (
-                                    <HiOutlineClipboardDocument />
-                                  )
-                                }
-                              />
-                              <IconButton
-                                onClick={goToExplorer}
-                                ml="4px"
-                                fontSize="16px"
-                                size="xs"
-                                variant="ghost"
-                                icon={<HiArrowTopRightOnSquare />}
-                              />
-                            </Flex>
-                            <Flex>
-                              {cycles > 0n || isLocal ? (
-                                <Button
+                  {addresses.length &&
+                    addresses.map(({ address, balance }, index) => (
+                      <Fragment key={index}>
+                        <Flex mb="40px" justifyContent="center">
+                          {balance ? (
+                            <Text fontSize="3xl">
+                              {parseFloat(balance).toPrecision(3)}{" "}
+                              <Box as="span" fontSize="20px">
+                                {network.nativeCurrency.symbol}
+                              </Box>
+                            </Text>
+                          ) : (
+                            <Spinner />
+                          )}
+                        </Flex>
+                        <Flex mb="12px">
+                          {address && (
+                            <Flex flexDir="column" alignItems="center">
+                              <Flex alignItems="center" mb="8px">
+                                <Text>
+                                  {address.slice(0, 10)}...{address.slice(-8)}
+                                </Text>
+                                <IconButton
+                                  onClick={() => copyToClipboard(address)}
+                                  ml="8px"
+                                  fontSize="16px"
                                   size="xs"
-                                  variant="outline"
-                                  onClick={() => onTopupOpen()}
-                                >
-                                  {(
-                                    Number(
-                                      ((cycles ?? 0n) * 1000n) /
-                                        1_000_000_000_000n
-                                    ) / 1000
-                                  )?.toPrecision(2)}
-                                  T Cycles
-                                </Button>
-                              ) : (
-                                <Button
+                                  variant="ghost"
+                                  icon={
+                                    hasCopied ? (
+                                      <HiOutlineClipboardDocumentCheck />
+                                    ) : (
+                                      <HiOutlineClipboardDocument />
+                                    )
+                                  }
+                                />
+                                <IconButton
+                                  onClick={() => goToExplorer(index)}
+                                  ml="4px"
+                                  fontSize="16px"
                                   size="xs"
-                                  variant="outline"
-                                  colorScheme="yellow"
-                                  onClick={() => onTopupOpen()}
-                                >
-                                  Not enough cycles
-                                </Button>
-                              )}
+                                  variant="ghost"
+                                  icon={<HiArrowTopRightOnSquare />}
+                                />
+                              </Flex>
                             </Flex>
-                          </Flex>
-                        )}
-                      </Flex>
-                    </>
-                  )}
+                          )}
+                        </Flex>
+                      </Fragment>
+                    ))}
                 </Box>
               ) : (
                 <Button
@@ -357,23 +364,26 @@ const App = () => {
                 </Button>
               )}
             </Box>
-
             <Divider mb="16px" mt="auto" />
             <Box>
               <Button
                 variant="ghost"
                 onClick={onHistoryOpen}
                 leftIcon={<HiClock />}
-                disabled={!loggedIn || !address}
+                disabled={!loggedIn || !addresses[0].address}
               >
                 History
               </Button>
-              {balance > 0 ? (
+              {addresses[0].balance > 0 ? (
                 <Button
                   ml="8px"
                   onClick={onSendOpen}
                   leftIcon={<HiPlusCircle />}
-                  disabled={!loggedIn || !address || !(cycles > 0n || isLocal)}
+                  disabled={
+                    !loggedIn ||
+                    !addresses[0].address ||
+                    !(cycles > 0n || isLocal)
+                  }
                 >
                   Transfer
                 </Button>
@@ -382,7 +392,7 @@ const App = () => {
                   ml="8px"
                   onClick={handleTopUp}
                   leftIcon={<HiArrowDownOnSquareStack />}
-                  disabled={!loggedIn || !address}
+                  disabled={!loggedIn || !addresses[0].address}
                 >
                   Top up
                 </Button>
@@ -412,9 +422,8 @@ const App = () => {
               setCycles={setCycles}
               setWaiting={setWaiting}
               setTransactions={setTransactions}
-              setBalance={setBalance}
               actor={actor}
-              address={address}
+              address={addresses[0].address}
               isOpen={isSendOpen}
               onClose={onSendClose}
             />
@@ -477,7 +486,7 @@ const App = () => {
         </Box>
       )}
     </Flex>
-  );
-};
+  )
+}
 
-export default App;
+export default App

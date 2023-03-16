@@ -1,0 +1,15 @@
+#V2
+call "q4eej-kyaaa-aaaaa-aaaha-cai".create_address(1);
+call "q4eej-kyaaa-aaaaa-aaaha-cai".create_address(1)
+call "q4eej-kyaaa-aaaaa-aaaha-cai".create_address(2)
+call "q4eej-kyaaa-aaaaa-aaaha-cai".get_principal(179 : nat8)(153 : nat8)(250 : nat8)
+call "q4eej-kyaaa-aaaaa-aaaha-cai".get_principal(179 : nat8)
+call "q4eej-kyaaa-aaaaa-aaaha-cai".get_principal(179 )
+call "q4eej-kyaaa-aaaaa-aaaha-cai".get_principal(179)
+call "q4eej-kyaaa-aaaaa-aaaha-cai".get_address(0)
+"q4eej-kyaaa-aaaaa-aaaha-cai".get_caller_data(178 : nat8, 10_188_424_182_043_483_532 : nat64)
+"q4eej-kyaaa-aaaaa-aaaha-cai".get_caller_data(0,1)
+q4eej-kyaaa-aaaaa-aaaha-cai.get_caller_data(0,1)
+"q4eej-kyaaa-aaaaa-aaaha-cai".get_caller_data(0,1)
+"q4eej-kyaaa-aaaaa-aaaha-cai".get_caller_data(0, 1)
+"q4eej-kyaaa-aaaaa-aaaha-cai".get_caller_data(1 : nat8, 1 : nat64)

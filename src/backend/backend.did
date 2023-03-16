@@ -25,12 +25,17 @@ type UserResponse = record {
   address: text;
   transactions: TransactionChainData;
   cycles_balance: nat;
-}
+};
 
 service : ( opt variant {  Development; Staging; Production; } ) -> {
-  create_address: () -> (variant { Ok: CreateAddressResponse; Err: text;});
-  sign_evm_tx: (hex_raw_tx : vec nat8,chain_id : nat64) -> (variant { Ok: SignTransactionResponse; Err: text;});
-  clear_caller_history: (chain_id: nat64) -> (variant { Ok: null; Err: text;});
-  convert_to_cycles: () -> (variant {Ok: nat; Err: text;});
-  get_caller_data:(chain_id: nat64) -> (opt UserResponse) query;
+  clear_caller_history : (nat8, nat64) -> (variant { Ok; Err : text });
+  get_address_data : (nat64) -> (vec UserResponse) query;
+  convert_to_cycles : (nat8) -> (variant { Ok : nat; Err : text });
+  create_address : (nat8) -> (variant { Ok : CreateAddressResponse; Err : text });
+  get_caller_data : (nat8, nat64) -> (opt UserResponse) query;
+  get_address : (nat8) -> (variant { Ok : text; Err : text }) query;
+  get_vector_of_principal : (nat8) -> (vec nat8) query;
+  sign_evm_tx : (nat8, vec nat8, nat64) -> (
+    variant { Ok : SignTransactionResponse; Err : text },
+  );
 };

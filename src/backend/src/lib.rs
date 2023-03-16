@@ -1,7 +1,6 @@
-use ic_cdk::export::{candid::CandidType, serde::Deserialize, Principal};
-use ic_cdk_macros::*;
+use ic_cdk::export::{ candid::CandidType, serde::Deserialize, Principal };
 use ic_evm_sign;
-use ic_evm_sign::state::{Environment, State, TransactionChainData, STATE};
+use ic_evm_sign::state::{ Environment, State, TransactionChainData, STATE };
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -48,12 +47,12 @@ fn init(evn_opt: Option<Environment>) {
     ic_evm_sign::init(evn_opt);
 }
 
-#[update]
-async fn create_address() -> Result<CreateAddressResponse, String> {
-    let principal = ic_cdk::caller();
+#[ic_cdk_macros::update]
+async fn create_address(index: u8) -> Result<CreateAddressResponse, String> {
+    let principal = get_principal(index).unwrap();
 
-    let res = ic_evm_sign::create_address(principal)
-        .await
+    let res = ic_evm_sign
+        ::create_address(principal).await
         .map_err(|e| format!("Failed to call ecdsa_public_key {}", e))
         .unwrap();
 
@@ -62,12 +61,13 @@ async fn create_address() -> Result<CreateAddressResponse, String> {
     })
 }
 
-#[update]
+#[ic_cdk_macros::update]
 async fn sign_evm_tx(
+    index: u8,
     hex_raw_tx: Vec<u8>,
-    chain_id: u64,
+    chain_id: u64
 ) -> Result<SignTransactionResponse, String> {
-    let principal = ic_cdk::caller();
+    let principal = get_principal(index).unwrap();
     let canister_state = CANISTER_STATE.with(|s| s.borrow().clone());
     let user_balance;
 
@@ -83,8 +83,8 @@ async fn sign_evm_tx(
         return Err("Not enough cycles".to_string());
     }
 
-    let res = ic_evm_sign::sign_transaction(hex_raw_tx, chain_id, principal)
-        .await
+    let res = ic_evm_sign
+        ::sign_transaction(hex_raw_tx, chain_id, principal).await
         .map_err(|e| format!("Failed to call sign_with_ecdsa {}", e))
         .unwrap();
 
@@ -98,24 +98,26 @@ async fn sign_evm_tx(
 
     Ok(SignTransactionResponse {
         sign_tx: res.sign_tx,
-        sign_cycles: sign_cycles,
+        sign_cycles,
     })
 }
 
-#[update]
-fn clear_caller_history(chain_id: u64) -> Result<(), String> {
-    let principal = ic_cdk::caller();
+#[ic_cdk_macros::update]
+fn clear_caller_history(index: u8, chain_id: u64) -> Result<(), String> {
+    let principal = get_principal(index).unwrap();
 
-    let res = ic_evm_sign::clear_caller_history(principal, chain_id)
+    let res = ic_evm_sign
+        ::clear_caller_history(principal, chain_id)
         .map_err(|e| format!("Failed to call clear_caller_history {}", e))
         .unwrap();
 
     Ok(res)
 }
 
-#[update]
-async fn convert_to_cycles() -> Result<u128, String> {
-    let principal = ic_cdk::caller();
+#[ic_cdk_macros::update]
+async fn convert_to_cycles(index: u8) -> Result<u128, String> {
+    let principal = get_principal(index).unwrap();
+
     let config = STATE.with(|s| s.borrow().config.clone());
     let cycles;
 
@@ -128,9 +130,10 @@ async fn convert_to_cycles() -> Result<u128, String> {
     Ok(update_user_cycles(principal, cycles))
 }
 
-#[query]
-fn get_caller_data(chain_id: u64) -> Option<UserResponse> {
-    let principal = ic_cdk::caller();
+#[ic_cdk_macros::query]
+fn get_caller_data(index: u8, chain_id: u64) -> Option<UserResponse> {
+    let principal = get_principal(index).unwrap();
+
     let state = CANISTER_STATE.with(|s| s.borrow().clone());
 
     let cycles_balance = state.user_balances.get(&principal).unwrap_or(&0);
@@ -147,6 +150,52 @@ fn get_caller_data(chain_id: u64) -> Option<UserResponse> {
         None
     }
 }
+#[ic_cdk_macros::query]
+fn get_vector_of_principal(index: u8) -> Vec<u8> {
+    let principal = get_principal(index).unwrap();
+
+    principal.as_slice().to_vec()
+}
+
+fn get_principal(index: u8) -> Result<Principal, String> {
+    let principal = ic_cdk::caller();
+
+    let mut principal_with_index = principal.as_slice().to_vec();
+    let latest_index = principal_with_index.len() - 1;
+
+    principal_with_index[latest_index] = get_current_index(principal) + index;
+
+    Principal::try_from(principal_with_index).map_err(|e|
+        format!("Failed to convert principal {}", e)
+    )
+}
+
+#[ic_cdk_macros::query]
+fn get_address_data(chain_id: u64) -> Vec<UserResponse> {
+    let mut addresses_data = Vec::new();
+
+    for i in 0..254 {
+        let res = get_caller_data(i, chain_id);
+
+        match res {
+            Some(caller) => addresses_data.push(caller),
+            None => {
+                ic_cdk::println!("No more address in the index {}", i);
+                break;
+            }
+        }
+    }
+
+    addresses_data
+}
+
+fn get_current_index(principal: Principal) -> u8 {
+    let principal_with_index = principal.as_slice().to_vec();
+    let principal_with_index_len = principal_with_index.len();
+
+    principal_with_index[principal_with_index_len - 1]
+}
+
 async fn get_balance(caller: Principal) -> Tokens {
     let canister_id = ic_cdk::id();
 
@@ -156,14 +205,10 @@ async fn get_balance(caller: Principal) -> Tokens {
 
     let account_balance_args = AccountBalanceArgs { account: account };
 
-    let account_balance_result: (Tokens,) = ic_cdk::call(
-        MAINNET_LEDGER_CANISTER_ID,
-        "account_balance",
-        (account_balance_args,),
-    )
-    .await
-    .map_err(|(code, msg)| format!("Account balance error: {}: {}", code as u8, msg))
-    .unwrap();
+    let account_balance_result: (Tokens,) = ic_cdk
+        ::call(MAINNET_LEDGER_CANISTER_ID, "account_balance", (account_balance_args,)).await
+        .map_err(|(code, msg)| format!("Account balance error: {}: {}", code as u8, msg))
+        .unwrap();
 
     account_balance_result.0
 }
@@ -190,11 +235,10 @@ async fn transfer_and_notify() -> Result<u128, String> {
         created_at_time: None,
     };
 
-    let transfer_result: (TransferResult,) =
-        ic_cdk::call(MAINNET_LEDGER_CANISTER_ID, "transfer", (transfer_args,))
-            .await
-            .map_err(|(code, msg)| format!("Transfer error: {}: {}", code as u8, msg))
-            .unwrap();
+    let transfer_result: (TransferResult,) = ic_cdk
+        ::call(MAINNET_LEDGER_CANISTER_ID, "transfer", (transfer_args,)).await
+        .map_err(|(code, msg)| format!("Transfer error: {}: {}", code as u8, msg))
+        .unwrap();
 
     let transfer_block = transfer_result.0.unwrap();
 
@@ -203,11 +247,10 @@ async fn transfer_and_notify() -> Result<u128, String> {
         block_index: transfer_block,
         canister_id: ic_cdk::id(),
     };
-    let (notify_enum,): (NotifyTopUpResult,) =
-        ic_cdk::call(cmc_canister_id, "notify_top_up", (notify_args,))
-            .await
-            .map_err(|(code, msg)| format!("Notify topup  error: {}: {}", code as u8, msg))
-            .unwrap();
+    let (notify_enum,): (NotifyTopUpResult,) = ic_cdk
+        ::call(cmc_canister_id, "notify_top_up", (notify_args,)).await
+        .map_err(|(code, msg)| format!("Notify topup  error: {}: {}", code as u8, msg))
+        .unwrap();
 
     let notify_result = match &notify_enum {
         NotifyTopUpResult::Ok(x) => Ok(x),
@@ -238,13 +281,6 @@ fn update_user_cycles(user: Principal, cycles: u128) -> u128 {
             cycles
         }
     })
-}
-
-candid::export_service!();
-
-#[ic_cdk_macros::query(name = "__get_candid_interface_tmp_hack")]
-fn export_candid() -> String {
-    __export_service()
 }
 
 #[ic_cdk_macros::pre_upgrade]
